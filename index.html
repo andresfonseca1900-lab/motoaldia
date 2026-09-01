@@ -952,13 +952,11 @@ function exportPDF() {
   try {
     if (!STATE.moto) { showToast('Registra tu moto primero', 'error'); return; }
 
-    // Intentar obtener jsPDF de los posibles namespaces que usa el CDN
     const jsPDF = (window.jspdf && window.jspdf.jsPDF)
                || window.jsPDF
                || (window.jspdf);
 
     if (!jsPDF || typeof jsPDF !== 'function') {
-      // Fallback: generar HTML imprimible si jsPDF no cargó
       exportPDFFallback();
       return;
     }
@@ -966,77 +964,102 @@ function exportPDF() {
     const doc = new jsPDF({ unit:'mm', format:'a4' });
     const d = STATE.moto, km = getKmActual();
 
-    // Header rojo
-    doc.setFillColor(14,14,14); doc.rect(0,0,210,40,'F');
-    doc.setTextColor(224,43,43); doc.setFontSize(20); doc.setFont('helvetica','bold');
-    doc.text('TU MOTO AL DIA', 20, 16);
-    doc.setTextColor(240,240,240); doc.setFontSize(12);
-    doc.text(String(d.marca+' '+d.modelo+' '+d.año), 20, 28);
-    doc.setTextColor(138,138,138); doc.setFontSize(9);
-    doc.text('Generado el '+new Date().toLocaleDateString('es-CO'), 20, 36);
+    // ── HEADER ───────────────────────────────────────────────
+    doc.setFillColor(14,14,14); doc.rect(0,0,210,50,'F');
 
-    // Ficha técnica
-    doc.setFillColor(34,34,34); doc.roundedRect(10,45,190,58,3,3,'F');
+    // Foto de la moto en el header (esquina derecha, circular)
+    if (STATE.foto) {
+      try {
+        // Determinar formato de la imagen desde el data URL
+        var fotoData = STATE.foto;
+        var fmtMatch = fotoData.match(/^data:image\/(\w+);base64,/);
+        var fmt = fmtMatch ? fmtMatch[1].toUpperCase() : 'JPEG';
+        if (fmt === 'JPG') fmt = 'JPEG';
+        // jsPDF acepta JPEG, PNG, WEBP
+        if (!['JPEG','PNG','WEBP'].includes(fmt)) fmt = 'JPEG';
+        // Añadir imagen como círculo — jsPDF no soporta clip nativo,
+        // pero addImage con coordenadas centradas da buen resultado
+        doc.addImage(fotoData, fmt, 155, 5, 45, 40);
+        // Marco rojo alrededor
+        doc.setDrawColor(224,43,43); doc.setLineWidth(0.8);
+        doc.rect(155,5,45,40);
+      } catch(imgErr) {
+        // Si la imagen falla simplemente no se pinta — no rompe el PDF
+        console.warn('PDF image error:', imgErr);
+      }
+    }
+
+    // Texto del header
+    doc.setTextColor(224,43,43); doc.setFontSize(18); doc.setFont('helvetica','bold');
+    doc.text('TU MOTO AL DIA', 12, 16);
+    doc.setTextColor(240,240,240); doc.setFontSize(13);
+    doc.text(String(d.marca+' '+d.modelo+' '+d.año), 12, 28);
+    doc.setTextColor(138,138,138); doc.setFontSize(8);
+    doc.text('Generado el '+new Date().toLocaleDateString('es-CO'), 12, 36);
+    doc.text('Km actuales: '+km.toLocaleString('es-CO')+' km', 12, 43);
+
+    // ── FICHA TÉCNICA ─────────────────────────────────────────
+    var yF = 58;
+    doc.setFillColor(34,34,34); doc.roundedRect(10,yF,190,56,3,3,'F');
     doc.setTextColor(224,43,43); doc.setFontSize(10); doc.setFont('helvetica','bold');
-    doc.text('FICHA TECNICA', 20, 55);
+    doc.text('FICHA TECNICA', 18, yF+9);
     doc.setFont('helvetica','normal'); doc.setFontSize(9);
-    const fichaData = [
-      ['Km actuales', String(km.toLocaleString('es-CO'))+' km'],
+    var fichaData = [
       ['Aceite recomendado', String(d.aceiteRec||'')],
       ['Intervalo de aceite', String((d.intervalos.aceite||0).toLocaleString())+' km'],
       ['Refrigeracion', d.refrigeracionLiquida?'Liquida':'Aire'],
       ['Cilindrada', String(d.cilindrada||'')+' cc'],
       ['Km al dia promedio', String(STATE.kmDia)+' km'],
+      ['Kit de arrastre', d.arrastre?'Cada '+String((d.intervalos.arrastre||0).toLocaleString())+' km':'No aplica'],
     ];
-    fichaData.forEach(function([k,v],i) {
-      doc.setTextColor(138,138,138); doc.text(k+':', 20, 65+i*8);
-      doc.setTextColor(240,240,240); doc.text(String(v||''), 95, 65+i*8);
+    fichaData.forEach(function(row,i) {
+      doc.setTextColor(138,138,138); doc.text(row[0]+':', 18, yF+18+i*7);
+      doc.setTextColor(240,240,240); doc.text(String(row[1]||''), 95, yF+18+i*7);
     });
 
-    // Historial
-    var y = 115;
+    // ── HISTORIAL ─────────────────────────────────────────────
+    var y = yF + 64;
     doc.setFillColor(200,30,30); doc.rect(10,y,190,9,'F');
     doc.setTextColor(255,255,255); doc.setFontSize(10); doc.setFont('helvetica','bold');
-    doc.text('HISTORIAL DE SERVICIOS', 20, y+6); y += 15;
+    doc.text('HISTORIAL DE SERVICIOS', 18, y+6); y += 14;
 
     var historial = Array.isArray(STATE.historial) ? STATE.historial : [];
     if (historial.length===0) {
       doc.setFont('helvetica','italic'); doc.setTextColor(138,138,138); doc.setFontSize(9);
-      doc.text('Sin servicios registrados.', 20, y);
+      doc.text('Sin servicios registrados aun.', 18, y);
     } else {
       historial.slice(0,25).forEach(function(h,i) {
         if (y > 272) { doc.addPage(); y = 20; }
         var bg = i%2===0 ? [34,34,34] : [28,28,28];
         doc.setFillColor(bg[0],bg[1],bg[2]); doc.rect(10,y-5,190,10,'F');
-        var titulo = String(h.titulo||'').substring(0,45);
+        var titulo = String(h.titulo||'').substring(0,42);
         var fecha  = String(h.fecha||'');
         var kmStr  = h.km ? String(Number(h.km).toLocaleString('es-CO'))+' km' : '';
         var costo  = h.costo ? '$'+String(Number(h.costo).toLocaleString('es-CO')) : '';
         doc.setFont('helvetica','bold'); doc.setTextColor(240,240,240); doc.setFontSize(8);
         doc.text(titulo, 14, y+1);
         doc.setFont('helvetica','normal'); doc.setTextColor(138,138,138); doc.setFontSize(8);
-        doc.text(fecha, 128, y+1);
-        doc.text(kmStr, 158, y+1);
-        doc.text(costo, 182, y+1);
+        doc.text(fecha, 126, y+1);
+        doc.text(kmStr, 154, y+1);
+        doc.text(costo, 178, y+1);
         y += 11;
       });
     }
 
-    // Footer
-    doc.setTextColor(80,80,80); doc.setFontSize(8); doc.setFont('helvetica','italic');
-    doc.text('Tu Moto al Dia — El historial de tu motocicleta', 20, 287);
+    // ── FOOTER ────────────────────────────────────────────────
+    doc.setTextColor(60,60,60); doc.setFontSize(8); doc.setFont('helvetica','italic');
+    doc.text('Tu Moto al Dia — El historial, la salud y la comunidad de tu motocicleta', 12, 287);
 
     doc.save('HojaDeVida_'+d.marca+'_'+d.modelo+'_'+d.año+'.pdf');
-    showToast('✅ PDF descargado', 'ok');
+    showToast('✅ PDF con foto descargado', 'ok');
 
   } catch(e) {
     console.warn('exportPDF error:', e);
-    // Si cualquier cosa falla, usar el fallback HTML
     exportPDFFallback();
   }
 }
 
-// Fallback: ventana imprimible si jsPDF no está disponible
+// Fallback HTML imprimible — también incluye la foto
 function exportPDFFallback() {
   try {
     if (!STATE.moto) return;
@@ -1044,26 +1067,54 @@ function exportPDFFallback() {
     var historial = Array.isArray(STATE.historial) ? STATE.historial : [];
     var win = window.open('','_blank');
     if (!win) { showToast('Permite ventanas emergentes para exportar', 'error'); return; }
-    win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Hoja de Vida - '+d.marca+' '+d.modelo+'</title><style>'+
-      'body{font-family:Arial,sans-serif;padding:30px;color:#333;max-width:800px;margin:0 auto}'+
-      'h1{color:#E02B2B;border-bottom:3px solid #E02B2B;padding-bottom:10px}'+
+
+    // Bloque de foto para el HTML
+    var fotoHTML = STATE.foto
+      ? '<img src="'+STATE.foto+'" style="width:120px;height:120px;object-fit:cover;border-radius:8px;border:3px solid #E02B2B;float:right;margin:0 0 12px 16px">'
+      : '';
+
+    win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8">'+
+      '<title>Hoja de Vida - '+d.marca+' '+d.modelo+'</title><style>'+
+      'body{font-family:Arial,sans-serif;padding:30px;color:#333;max-width:820px;margin:0 auto}'+
+      '.header{overflow:hidden;border-bottom:3px solid #E02B2B;padding-bottom:14px;margin-bottom:20px}'+
+      'h1{color:#E02B2B;margin:0 0 4px}'+
+      '.meta{color:#888;font-size:12px}'+
       'h2{color:#1A1A2E;border-bottom:1px solid #eee;padding-bottom:6px;margin-top:24px}'+
       '.row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f0f0f0}'+
-      '.row strong{color:#555}.row span{color:#111;font-weight:600}'+
-      '.hist-item{padding:10px 12px;margin:6px 0;border-left:3px solid #E02B2B;background:#f9f9f9}'+
-      '.hist-item strong{color:#111}.hist-item small{color:#888}'+
-      '.footer{margin-top:40px;font-size:11px;color:#aaa;text-align:center;border-top:1px solid #eee;padding-top:12px}'+
-      '@media print{body{padding:0}button{display:none}}'+
-    '</style></head><body>'+
-    '<h1>🏍️ '+d.marca+' '+d.modelo+' '+d.año+'</h1>'+
-    '<p style="color:#888;font-size:12px">Hoja de vida generada por Tu Moto al Día · '+new Date().toLocaleDateString('es-CO')+'</p>'+
-    '<h2>Ficha Técnica</h2>'+
-    [['Km actuales',km.toLocaleString('es-CO')+' km'],['Aceite recomendado',d.aceiteRec||''],['Intervalo de aceite',(d.intervalos.aceite||0).toLocaleString()+' km'],['Refrigeración',d.refrigeracionLiquida?'Líquida':'Aire'],['Cilindrada',(d.cilindrada||'')+' cc'],['Km al día',STATE.kmDia+' km']].map(function(r){return'<div class="row"><strong>'+r[0]+'</strong><span>'+r[1]+'</span></div>';}).join('')+
-    '<h2>Historial de Servicios ('+historial.length+')</h2>'+
-    (historial.length===0?'<p style="color:#aaa">Sin servicios registrados.</p>':historial.map(function(h){return'<div class="hist-item"><strong>'+String(h.titulo||'')+'</strong><br><small>'+String(h.fecha||'')+' · '+String(h.km?(Number(h.km).toLocaleString('es-CO')+' km'):'')+''+(h.costo?' · $'+Number(h.costo).toLocaleString('es-CO'):'')+' </small></div>';}).join(''))+
-    '<div class="footer">Tu Moto al Día — El historial, la salud y la comunidad de tu motocicleta</div>'+
-    '<br><button onclick="window.print()" style="padding:12px 24px;background:#E02B2B;color:#fff;border:none;border-radius:8px;font-size:15px;cursor:pointer;font-family:Arial">🖨️ Imprimir / Guardar PDF</button>'+
-    '</body></html>');
+      '.row strong{color:#555}.row span{font-weight:600}'+
+      '.hist-item{padding:10px 12px;margin:5px 0;border-left:3px solid #E02B2B;background:#f9f9f9;display:flex;justify-content:space-between;align-items:center}'+
+      '.hist-item .ht{font-weight:700;color:#111}.hist-item .hd{font-size:11px;color:#888;text-align:right}'+
+      '.footer{margin-top:36px;font-size:11px;color:#aaa;text-align:center;border-top:1px solid #eee;padding-top:12px;clear:both}'+
+      '@media print{body{padding:10px}button{display:none}.hist-item{break-inside:avoid}}'+
+      '</style></head><body>'+
+      '<div class="header">'+fotoHTML+
+      '<h1>'+d.marca+' '+d.modelo+' '+d.año+'</h1>'+
+      '<div class="meta">Hoja de vida generada por Tu Moto al Día · '+new Date().toLocaleDateString('es-CO')+'</div>'+
+      '<div class="meta" style="margin-top:4px;font-weight:700;color:#E02B2B">'+km.toLocaleString('es-CO')+' km acumulados</div>'+
+      '</div>'+
+      '<h2>Ficha Técnica</h2>'+
+      [['Km actuales',km.toLocaleString('es-CO')+' km'],
+       ['Aceite recomendado',d.aceiteRec||''],
+       ['Intervalo de aceite',(d.intervalos.aceite||0).toLocaleString()+' km'],
+       ['Refrigeración',d.refrigeracionLiquida?'Líquida':'Aire'],
+       ['Cilindrada',(d.cilindrada||'')+' cc'],
+       ['Km al día',STATE.kmDia+' km'],
+       ['Kit de arrastre',d.arrastre?'Cada '+(d.intervalos.arrastre||0).toLocaleString()+' km':'No aplica']
+      ].map(function(r){return'<div class="row"><strong>'+r[0]+'</strong><span>'+r[1]+'</span></div>';}).join('')+
+      '<h2>Historial de Servicios ('+historial.length+')</h2>'+
+      (historial.length===0
+        ? '<p style="color:#aaa">Sin servicios registrados.</p>'
+        : historial.map(function(h){
+            return '<div class="hist-item">'+
+              '<div><div class="ht">'+String(h.titulo||'')+'</div></div>'+
+              '<div class="hd">'+String(h.fecha||'')+'<br>'+
+              (h.km?Number(h.km).toLocaleString('es-CO')+' km':'')+
+              (h.costo?' · $'+Number(h.costo).toLocaleString('es-CO'):'')+
+              '</div></div>';
+          }).join(''))+
+      '<div class="footer">Tu Moto al Día — El historial, la salud y la comunidad de tu motocicleta</div>'+
+      '<br><button onclick="window.print()" style="padding:12px 24px;background:#E02B2B;color:#fff;border:none;border-radius:8px;font-size:15px;cursor:pointer;font-family:Arial">🖨️ Imprimir / Guardar PDF</button>'+
+      '</body></html>');
     win.document.close();
     showToast('✅ Documento listo para imprimir', 'ok');
   } catch(e) {
