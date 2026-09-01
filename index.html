@@ -215,7 +215,9 @@ svg.ring{transform:rotate(-90deg);}
         <div class="odometer" id="dash-odo">--<span class="odometer-unit">km</span></div>
         <button onclick="mostrarEnciclopediaMoto()" style="background:none;border:none;color:var(--blue);font-size:11px;cursor:pointer;padding:4px 0;font-family:inherit;font-weight:600">📖 Ver ficha enciclopédica →</button>
       </div>
-      <div id="dash-moto-photo" style="width:56px;height:56px;border-radius:50%;background:var(--card);border:2px solid var(--red-dim);display:flex;align-items:center;justify-content:center;font-size:28px;overflow:hidden;cursor:pointer" onclick="goToTab('perfil')">🏍️</div>
+      <div id="dash-moto-photo" style="width:56px;height:56px;border-radius:50%;background:var(--card);border:2px solid var(--red-dim);display:flex;align-items:center;justify-content:center;font-size:28px;overflow:hidden;cursor:pointer;position:relative" onclick="goToTab('perfil')" title="Toca para cambiar foto">🏍️
+        <div style="position:absolute;bottom:0;right:0;width:18px;height:18px;background:var(--red);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;border:2px solid var(--bg)">📷</div>
+      </div>
     </div>
     <div id="weather-banner" style="display:none" class="weather-banner">
       <div style="font-size:22px">🌧️</div>
@@ -315,10 +317,16 @@ svg.ring{transform:rotate(-90deg);}
           <div class="field-err" id="err-cat">Selecciona una categoría</div>
         </div>
         <div class="ig"><div class="il">Repuesto / Servicio <span style="color:var(--red)">*</span></div>
-          <select class="inp" id="rep-select" onchange="validarFormManual()">
+          <select class="inp" id="rep-select" onchange="onRepSelectChange()">
             <option value="">Primero elige la categoría</option>
           </select>
           <div class="field-err" id="err-rep">Selecciona un repuesto o servicio</div>
+        </div>
+        <!-- Campo libre cuando el usuario elige "Otro / personalizado" -->
+        <div class="ig" id="rep-custom-wrap" style="display:none">
+          <div class="il">Describe el repuesto o servicio <span style="color:var(--red)">*</span></div>
+          <input class="inp" id="inp-rep-custom" type="text" placeholder="Ej: Rectificación de culata, Cambio de retén..." oninput="validarFormManual()">
+          <div style="font-size:11px;color:var(--metal);margin-top:4px">Este servicio quedará guardado en tu hoja de vida tal como lo escribas.</div>
         </div>
         <div class="ig"><div class="il">Costo (COP)</div><input class="inp" id="inp-costo" type="number" placeholder="Ej: 85000"></div>
         <div class="ig"><div class="il">Kilometraje al momento del servicio</div><input class="inp" id="inp-km-serv" type="number" placeholder="Se autocompleta"></div>
@@ -368,7 +376,12 @@ svg.ring{transform:rotate(-90deg);}
     <div id="accesorios-libres-panel" style="margin-top:10px"></div>
     <div class="sec">Mi moto</div>
     <div class="card" style="padding:0 16px" id="perfil-moto"></div>
-    <button class="btn btn-ghost" style="margin-top:8px" onclick="mostrarEnciclopediaMoto()">📖 Ver ficha enciclopédica</button>
+    <!-- Input oculto para cambiar foto desde perfil -->
+    <input type="file" id="foto-change-input" accept="image/*" style="display:none" onchange="cambiarFoto(event)">
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn btn-ghost" style="flex:1;margin-top:0" onclick="document.getElementById('foto-change-input').click()">📷 Cambiar foto de la moto</button>
+      <button class="btn btn-ghost" style="flex:1;margin-top:0" onclick="mostrarEnciclopediaMoto()">📖 Enciclopedia</button>
+    </div>
     <div class="sec">Datos y respaldo</div>
     <div style="display:flex;gap:8px">
       <button class="btn btn-ghost" style="flex:1;margin-top:0" onclick="openModal('modal-respaldo')">💾 Respaldo</button>
@@ -685,6 +698,45 @@ function handlePhoto(e) {
   } catch(e) { console.warn('handlePhoto error:', e); }
 }
 
+// Cambiar foto desde perfil — actualiza dashboard y perfil en tiempo real
+function cambiarFoto(e) {
+  try {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+      try {
+        STATE.foto = ev.target.result;
+        save();
+        // Actualizar avatar en dashboard
+        const ph = document.getElementById('dash-moto-photo');
+        if (ph) {
+          ph.innerHTML = `<img src="${STATE.foto}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">
+            <div style="position:absolute;bottom:0;right:0;width:18px;height:18px;background:var(--red);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;border:2px solid var(--bg)">📷</div>`;
+        }
+        // Actualizar preview en perfil
+        const pp = document.getElementById('perfil-foto-preview');
+        if (pp) pp.innerHTML = fotoPreviewHTML();
+        showToast('✅ Foto actualizada', 'ok');
+      } catch(err) { console.warn('cambiarFoto save error:', err); }
+    };
+    reader.readAsDataURL(file);
+  } catch(e) { console.warn('cambiarFoto error:', e); }
+}
+
+function fotoPreviewHTML() {
+  if (STATE.foto) {
+    return `<div style="display:flex;align-items:center;gap:12px">
+      <img src="${STATE.foto}" style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid var(--red-dim);flex-shrink:0">
+      <div style="font-size:12px;color:var(--metal);line-height:1.5">Foto actual de tu moto.<br>Toca "Cambiar foto" para actualizarla.</div>
+    </div>`;
+  }
+  return `<div style="display:flex;align-items:center;gap:12px">
+    <div style="width:56px;height:56px;border-radius:50%;background:var(--card);border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0">🏍️</div>
+    <div style="font-size:12px;color:var(--metal);line-height:1.5">Sin foto aún.<br>Toca "Cambiar foto" para añadir una.</div>
+  </div>`;
+}
+
 function finishOnboarding() {
   try {
     ['aceite','arrastre','frenos','filtroAire','llantas'].forEach(k => {
@@ -895,65 +947,127 @@ function renderTaller() {
   } catch(e) {}
 }
 
-// FIX 6: exportPDF con jsPDF — descarga real en móviles
+// FIX PDF: namespace corregido + fallback si la lib no carga
 function exportPDF() {
   try {
     if (!STATE.moto) { showToast('Registra tu moto primero', 'error'); return; }
-    const { jsPDF } = window.jspdf;
-    if (!jsPDF) { showToast('PDF no disponible. Intenta desde un computador.', 'error'); return; }
+
+    // Intentar obtener jsPDF de los posibles namespaces que usa el CDN
+    const jsPDF = (window.jspdf && window.jspdf.jsPDF)
+               || window.jsPDF
+               || (window.jspdf);
+
+    if (!jsPDF || typeof jsPDF !== 'function') {
+      // Fallback: generar HTML imprimible si jsPDF no cargó
+      exportPDFFallback();
+      return;
+    }
+
     const doc = new jsPDF({ unit:'mm', format:'a4' });
     const d = STATE.moto, km = getKmActual();
-    // Header
+
+    // Header rojo
     doc.setFillColor(14,14,14); doc.rect(0,0,210,40,'F');
     doc.setTextColor(224,43,43); doc.setFontSize(20); doc.setFont('helvetica','bold');
-    doc.text('TU MOTO AL DÍA', 20, 16);
+    doc.text('TU MOTO AL DIA', 20, 16);
     doc.setTextColor(240,240,240); doc.setFontSize(12);
-    doc.text(`${d.marca} ${d.modelo} ${d.año}`, 20, 28);
+    doc.text(String(d.marca+' '+d.modelo+' '+d.año), 20, 28);
     doc.setTextColor(138,138,138); doc.setFontSize(9);
-    doc.text(`Generado el ${new Date().toLocaleDateString('es-CO')}`, 20, 36);
+    doc.text('Generado el '+new Date().toLocaleDateString('es-CO'), 20, 36);
+
     // Ficha técnica
-    doc.setFillColor(34,34,34); doc.roundedRect(10,45,190,60,3,3,'F');
+    doc.setFillColor(34,34,34); doc.roundedRect(10,45,190,58,3,3,'F');
     doc.setTextColor(224,43,43); doc.setFontSize(10); doc.setFont('helvetica','bold');
-    doc.text('FICHA TÉCNICA', 20, 55);
-    doc.setFont('helvetica','normal'); doc.setTextColor(176,176,176); doc.setFontSize(9);
+    doc.text('FICHA TECNICA', 20, 55);
+    doc.setFont('helvetica','normal'); doc.setFontSize(9);
     const fichaData = [
-      ['Km actuales', km.toLocaleString('es-CO')+' km'],
-      ['Aceite recomendado', d.aceiteRec],
-      ['Intervalo de aceite', d.intervalos.aceite.toLocaleString()+' km'],
-      ['Refrigeración', d.refrigeracionLiquida?'Líquida':'Aire'],
-      ['Cilindrada', d.cilindrada+' cc'],
-      ['Km al día', STATE.kmDia+' km'],
+      ['Km actuales', String(km.toLocaleString('es-CO'))+' km'],
+      ['Aceite recomendado', String(d.aceiteRec||'')],
+      ['Intervalo de aceite', String((d.intervalos.aceite||0).toLocaleString())+' km'],
+      ['Refrigeracion', d.refrigeracionLiquida?'Liquida':'Aire'],
+      ['Cilindrada', String(d.cilindrada||'')+' cc'],
+      ['Km al dia promedio', String(STATE.kmDia)+' km'],
     ];
-    fichaData.forEach(([k,v],i) => {
+    fichaData.forEach(function([k,v],i) {
       doc.setTextColor(138,138,138); doc.text(k+':', 20, 65+i*8);
-      doc.setTextColor(240,240,240); doc.text(v, 90, 65+i*8);
+      doc.setTextColor(240,240,240); doc.text(String(v||''), 95, 65+i*8);
     });
+
     // Historial
-    let y = 115;
-    doc.setFillColor(224,43,43); doc.rect(10,y,190,8,'F');
+    var y = 115;
+    doc.setFillColor(200,30,30); doc.rect(10,y,190,9,'F');
     doc.setTextColor(255,255,255); doc.setFontSize(10); doc.setFont('helvetica','bold');
-    doc.text('HISTORIAL DE SERVICIOS', 20, y+6); y += 14;
-    if (!STATE.historial||STATE.historial.length===0) {
+    doc.text('HISTORIAL DE SERVICIOS', 20, y+6); y += 15;
+
+    var historial = Array.isArray(STATE.historial) ? STATE.historial : [];
+    if (historial.length===0) {
       doc.setFont('helvetica','italic'); doc.setTextColor(138,138,138); doc.setFontSize(9);
       doc.text('Sin servicios registrados.', 20, y);
     } else {
-      STATE.historial.slice(0,20).forEach((h,i) => {
-        if (y > 270) { doc.addPage(); y = 20; }
-        const bg = i%2===0?[34,34,34]:[26,26,26];
-        doc.setFillColor(...bg); doc.rect(10,y-5,190,10,'F');
-        doc.setFont('helvetica','bold'); doc.setTextColor(240,240,240); doc.setFontSize(9);
-        doc.text(h.titulo||'', 15, y+1);
-        doc.setFont('helvetica','normal'); doc.setTextColor(138,138,138);
-        doc.text(h.fecha||'', 130, y+1);
-        doc.text(h.km?h.km.toLocaleString()+' km':'', 160, y+1);
+      historial.slice(0,25).forEach(function(h,i) {
+        if (y > 272) { doc.addPage(); y = 20; }
+        var bg = i%2===0 ? [34,34,34] : [28,28,28];
+        doc.setFillColor(bg[0],bg[1],bg[2]); doc.rect(10,y-5,190,10,'F');
+        var titulo = String(h.titulo||'').substring(0,45);
+        var fecha  = String(h.fecha||'');
+        var kmStr  = h.km ? String(Number(h.km).toLocaleString('es-CO'))+' km' : '';
+        var costo  = h.costo ? '$'+String(Number(h.costo).toLocaleString('es-CO')) : '';
+        doc.setFont('helvetica','bold'); doc.setTextColor(240,240,240); doc.setFontSize(8);
+        doc.text(titulo, 14, y+1);
+        doc.setFont('helvetica','normal'); doc.setTextColor(138,138,138); doc.setFontSize(8);
+        doc.text(fecha, 128, y+1);
+        doc.text(kmStr, 158, y+1);
+        doc.text(costo, 182, y+1);
         y += 11;
       });
     }
-    doc.save(`HojaDeVida_${d.marca}_${d.modelo}_${d.año}.pdf`);
-    showToast('✅ PDF descargado correctamente', 'ok');
+
+    // Footer
+    doc.setTextColor(80,80,80); doc.setFontSize(8); doc.setFont('helvetica','italic');
+    doc.text('Tu Moto al Dia — El historial de tu motocicleta', 20, 287);
+
+    doc.save('HojaDeVida_'+d.marca+'_'+d.modelo+'_'+d.año+'.pdf');
+    showToast('✅ PDF descargado', 'ok');
+
   } catch(e) {
     console.warn('exportPDF error:', e);
-    showToast('Error generando PDF. Intenta de nuevo.', 'error');
+    // Si cualquier cosa falla, usar el fallback HTML
+    exportPDFFallback();
+  }
+}
+
+// Fallback: ventana imprimible si jsPDF no está disponible
+function exportPDFFallback() {
+  try {
+    if (!STATE.moto) return;
+    var d = STATE.moto, km = getKmActual();
+    var historial = Array.isArray(STATE.historial) ? STATE.historial : [];
+    var win = window.open('','_blank');
+    if (!win) { showToast('Permite ventanas emergentes para exportar', 'error'); return; }
+    win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Hoja de Vida - '+d.marca+' '+d.modelo+'</title><style>'+
+      'body{font-family:Arial,sans-serif;padding:30px;color:#333;max-width:800px;margin:0 auto}'+
+      'h1{color:#E02B2B;border-bottom:3px solid #E02B2B;padding-bottom:10px}'+
+      'h2{color:#1A1A2E;border-bottom:1px solid #eee;padding-bottom:6px;margin-top:24px}'+
+      '.row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f0f0f0}'+
+      '.row strong{color:#555}.row span{color:#111;font-weight:600}'+
+      '.hist-item{padding:10px 12px;margin:6px 0;border-left:3px solid #E02B2B;background:#f9f9f9}'+
+      '.hist-item strong{color:#111}.hist-item small{color:#888}'+
+      '.footer{margin-top:40px;font-size:11px;color:#aaa;text-align:center;border-top:1px solid #eee;padding-top:12px}'+
+      '@media print{body{padding:0}button{display:none}}'+
+    '</style></head><body>'+
+    '<h1>🏍️ '+d.marca+' '+d.modelo+' '+d.año+'</h1>'+
+    '<p style="color:#888;font-size:12px">Hoja de vida generada por Tu Moto al Día · '+new Date().toLocaleDateString('es-CO')+'</p>'+
+    '<h2>Ficha Técnica</h2>'+
+    [['Km actuales',km.toLocaleString('es-CO')+' km'],['Aceite recomendado',d.aceiteRec||''],['Intervalo de aceite',(d.intervalos.aceite||0).toLocaleString()+' km'],['Refrigeración',d.refrigeracionLiquida?'Líquida':'Aire'],['Cilindrada',(d.cilindrada||'')+' cc'],['Km al día',STATE.kmDia+' km']].map(function(r){return'<div class="row"><strong>'+r[0]+'</strong><span>'+r[1]+'</span></div>';}).join('')+
+    '<h2>Historial de Servicios ('+historial.length+')</h2>'+
+    (historial.length===0?'<p style="color:#aaa">Sin servicios registrados.</p>':historial.map(function(h){return'<div class="hist-item"><strong>'+String(h.titulo||'')+'</strong><br><small>'+String(h.fecha||'')+' · '+String(h.km?(Number(h.km).toLocaleString('es-CO')+' km'):'')+''+(h.costo?' · $'+Number(h.costo).toLocaleString('es-CO'):'')+' </small></div>';}).join(''))+
+    '<div class="footer">Tu Moto al Día — El historial, la salud y la comunidad de tu motocicleta</div>'+
+    '<br><button onclick="window.print()" style="padding:12px 24px;background:#E02B2B;color:#fff;border:none;border-radius:8px;font-size:15px;cursor:pointer;font-family:Arial">🖨️ Imprimir / Guardar PDF</button>'+
+    '</body></html>');
+    win.document.close();
+    showToast('✅ Documento listo para imprimir', 'ok');
+  } catch(e) {
+    showToast('Error generando el documento', 'error');
   }
 }
 
@@ -975,12 +1089,14 @@ function renderPerfil() {
       <div class="acc-row"><div style="font-size:13px;color:var(--white)">Tecnomecánica</div><input class="inp" type="date" value="${STATE.accesorios.tecnoVence||''}" style="width:140px;padding:7px;font-size:12px" onchange="saveAccesorio('tecnoVence',this.value)"></div>
       ${d.refrigeracionLiquida?`<div class="acc-row"><div><div style="font-size:13px;color:var(--white)">Refrigerante</div><div style="font-size:11px;color:var(--metal)">Cada 2 años</div></div><input class="inp" type="date" value="${STATE.accesorios.refrigerante||''}" style="width:140px;padding:7px;font-size:12px" onchange="saveAccesorio('refrigerante',this.value)"></div>`:''}`;
     const pm = document.getElementById('perfil-moto');
-    if (pm) pm.innerHTML = [
-      ['Moto',`${d.marca} ${d.modelo} ${d.año}`],
-      ['Km actuales',km.toLocaleString('es-CO')+' km'],
-      ['Km/día',STATE.kmDia],
-      ['Llantas',STATE.llantas==='calle'?'Asfalto':STATE.llantas==='dual'?'Dual-Sport':'Off-Road'],
-    ].map(([k,v])=>`<div class="acc-row"><span style="font-size:13px;color:var(--metal)">${k}</span><span style="font-size:13px;color:var(--white);font-weight:600">${v}</span></div>`).join('');
+    if (pm) pm.innerHTML =
+      `<div id="perfil-foto-preview" style="padding:14px 0;border-bottom:1px solid var(--border)">${fotoPreviewHTML()}</div>` +
+      [
+        ['Moto',`${d.marca} ${d.modelo} ${d.año}`],
+        ['Km actuales',km.toLocaleString('es-CO')+' km'],
+        ['Km/día',STATE.kmDia],
+        ['Llantas',STATE.llantas==='calle'?'Asfalto':STATE.llantas==='dual'?'Dual-Sport':'Off-Road'],
+      ].map(([k,v])=>`<div class="acc-row"><span style="font-size:13px;color:var(--metal)">${k}</span><span style="font-size:13px;color:var(--white);font-weight:600">${v}</span></div>`).join('');
     // Accesorios libres
     const alp = document.getElementById('accesorios-libres-panel');
     if (alp && STATE.accesoriosLibres.length>0) {
@@ -1086,8 +1202,11 @@ function validarFormManual() {
   try {
     const cat = (document.getElementById('cat-select')||{}).value||'';
     const rep = (document.getElementById('rep-select')||{}).value||'';
+    const custom = (document.getElementById('inp-rep-custom')||{}).value||'';
     const btn = document.getElementById('btn-guardar');
-    if (btn) btn.disabled = !(cat && rep);
+    // Si eligió "Otro", el campo custom debe tener texto
+    const repOk = rep && rep !== '__custom__' ? true : (rep === '__custom__' && custom.trim().length > 2);
+    if (btn) btn.disabled = !(cat && repOk);
   } catch(e) {}
 }
 
@@ -1104,6 +1223,17 @@ function toggleSection(id) {
   } catch(e) {}
 }
 
+function onRepSelectChange() {
+  try {
+    const val = (document.getElementById('rep-select')||{}).value||'';
+    const wrap = document.getElementById('rep-custom-wrap');
+    const inp = document.getElementById('inp-rep-custom');
+    if (wrap) wrap.style.display = val === '__custom__' ? 'block' : 'none';
+    if (val !== '__custom__' && inp) inp.value = '';
+    validarFormManual();
+  } catch(e) {}
+}
+
 function updateRepuestos() {
   try {
     const cat = (document.getElementById('cat-select')||{}).value||'';
@@ -1111,10 +1241,20 @@ function updateRepuestos() {
     if (!sel) return;
     sel.innerHTML = '<option value="">Selecciona el servicio</option>';
     if (cat && REPUESTOS_POR_CAT[cat]) {
-      REPUESTOS_POR_CAT[cat].forEach(r => {
+      REPUESTOS_POR_CAT[cat].forEach(function(r) {
         const o = document.createElement('option'); o.value = r; o.textContent = r; sel.appendChild(o);
       });
     }
+    // Siempre añadir opción libre al final
+    const oOtro = document.createElement('option');
+    oOtro.value = '__custom__';
+    oOtro.textContent = '✏️ Otro / Escribir manualmente...';
+    sel.appendChild(oOtro);
+    // Ocultar campo custom al cambiar categoría
+    const wrap = document.getElementById('rep-custom-wrap');
+    const inp = document.getElementById('inp-rep-custom');
+    if (wrap) wrap.style.display = 'none';
+    if (inp) inp.value = '';
     validarFormManual();
   } catch(e) {}
 }
@@ -1204,28 +1344,51 @@ function guardarDesdeVoz(parsed) {
   } catch(e) { showToast('Error al guardar. Intenta de nuevo.', 'error'); }
 }
 
-// FIX 5: guardarServicio robusto
+// FIX 5: guardarServicio robusto con soporte de repuesto personalizado
 function guardarServicio() {
   try {
     const cat = (document.getElementById('cat-select')||{}).value||'';
-    const rep = (document.getElementById('rep-select')||{}).value||'';
+    const repRaw = (document.getElementById('rep-select')||{}).value||'';
+    const custom = ((document.getElementById('inp-rep-custom')||{}).value||'').trim();
+    // Resolver el nombre final del repuesto
+    const rep = repRaw === '__custom__' ? custom : repRaw;
     const costo = parseInt((document.getElementById('inp-costo')||{}).value)||0;
     const kmServ = parseInt((document.getElementById('inp-km-serv')||{}).value)||getKmActual();
-    if (!cat||!rep) { showToast('Selecciona categoría y servicio', 'error'); return; }
+    if (!cat || !rep) { showToast('Selecciona categoría y servicio', 'error'); return; }
     if (!Array.isArray(STATE.historial)) STATE.historial = [];
-    STATE.historial.unshift({fecha:new Date().toLocaleDateString('es-CO'),titulo:rep,km:kmServ,costo,categoria:cat,foto:reciboBase64||null});
-    // Reset component if applicable
-    const compMap = {'Cambio de aceite de motor':'aceite','Kit de arrastre completo (cadena + piñón + corona)':'arrastre','Pastillas de freno delanteras':'frenos','Pastillas de freno traseras':'frenos'};
+    STATE.historial.unshift({
+      fecha: new Date().toLocaleDateString('es-CO'),
+      titulo: rep,
+      km: kmServ,
+      costo,
+      categoria: cat,
+      esPersonalizado: repRaw === '__custom__',
+      foto: reciboBase64||null
+    });
+    // Reset component si aplica
+    const compMap = {
+      'Cambio de aceite de motor':'aceite',
+      'Kit de arrastre completo (cadena + piñón + corona)':'arrastre',
+      'Pastillas de freno delanteras':'frenos',
+      'Pastillas de freno traseras':'frenos'
+    };
     if (compMap[rep]) STATE.bigFive[compMap[rep]] = kmServ;
     save();
     renderHV();
     renderDashboard();
     const sr = document.getElementById('save-result');
-    if (sr) sr.innerHTML = '<div style="color:var(--green);font-size:14px;font-weight:700;padding:10px 0">✅ Guardado. Dashboard actualizado.</div>';
+    if (sr) sr.innerHTML = '<div style="color:var(--green);font-size:14px;font-weight:700;padding:10px 0">✅ Guardado en hoja de vida.</div>';
+    // Limpiar formulario
     reciboBase64 = null;
     const rp = document.getElementById('recibo-preview'); if(rp) rp.innerHTML='';
-    showToast('✅ Servicio guardado en hoja de vida', 'ok');
-  } catch(e) { showToast('Error al guardar. Intenta de nuevo.', 'error'); }
+    const cs = document.getElementById('cat-select'); if(cs) cs.value='';
+    const rs = document.getElementById('rep-select'); if(rs) rs.innerHTML='<option value="">Primero elige la categoría</option>';
+    const rc = document.getElementById('inp-rep-custom'); if(rc) rc.value='';
+    const rw = document.getElementById('rep-custom-wrap'); if(rw) rw.style.display='none';
+    const ic = document.getElementById('inp-costo'); if(ic) ic.value='';
+    const bg = document.getElementById('btn-guardar'); if(bg) bg.disabled=true;
+    showToast('✅ '+rep+' guardado', 'ok');
+  } catch(e) { showToast('Error al guardar. Intenta de nuevo.', 'error'); console.warn(e); }
 }
 
 // PERFIL ACTIONS
