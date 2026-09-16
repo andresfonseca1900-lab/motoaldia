@@ -92,6 +92,8 @@ svg.ring{transform:rotate(-90deg);}
 .field-err{font-size:11px;color:var(--red);margin-top:4px;display:none;}
 .field-err.show{display:block;}
 #splash{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:32px;text-align:center;background:radial-gradient(ellipse at 50% 30%,#2a0808 0%,var(--bg) 60%);}
+.mic-rec{animation:micPulse 1s ease-in-out infinite !important;background:#c0392b !important;}
+@keyframes micPulse{0%,100%{box-shadow:0 0 0 0 rgba(224,43,43,.6);}50%{box-shadow:0 0 0 18px rgba(224,43,43,0);}}
 </style>
 </head>
 <body>
@@ -303,10 +305,17 @@ svg.ring{transform:rotate(-90deg);}
       </div>
     </div>
     <div id="form-voz" style="display:none">
-      <div class="sec">Describe el mantenimiento</div>
+      <div class="sec">Habla o escribe</div>
       <div class="card">
-        <textarea class="inp" id="voz-texto" rows="4" placeholder="Ej: Hoy le cambié el aceite 10W40 y el filtro. Gasté $85.000" style="resize:none;line-height:1.5;margin-bottom:10px"></textarea>
-        <button class="btn btn-sm" onclick="analizarVoz()" id="btn-voz">Analizar con IA →</button>
+        <!-- Micrófono real -->
+        <div style="display:flex;flex-direction:column;align-items:center;gap:10px;padding:10px 0 14px;border-bottom:1px solid var(--border);margin-bottom:14px">
+          <div id="mic-status" style="font-size:13px;color:var(--metal);text-align:center;line-height:1.5">Toca el micrófono y cuéntanos qué le hicieron a tu moto</div>
+          <button id="btn-mic" onclick="toggleMic()" style="width:72px;height:72px;border-radius:50%;background:var(--red);border:none;cursor:pointer;font-size:28px;display:flex;align-items:center;justify-content:center;transition:all .2s;box-shadow:0 4px 16px rgba(224,43,43,.4)">🎙️</button>
+          <div id="mic-hint" style="font-size:11px;color:var(--metal)">Ej: "Hoy le cambié el aceite y las pastillas, gasté $85.000"</div>
+        </div>
+        <!-- Texto resultante del audio o escrito manualmente -->
+        <textarea class="inp" id="voz-texto" rows="3" placeholder="El texto del audio aparece aquí — también puedes escribir directamente..." style="resize:none;line-height:1.5;margin-bottom:10px" oninput="validarVoz()"></textarea>
+        <button class="btn btn-sm" onclick="analizarVoz()" id="btn-voz" disabled>Analizar con IA →</button>
         <div id="voz-result" style="margin-top:12px"></div>
       </div>
     </div>
@@ -802,8 +811,135 @@ function entrarSinLogin() {
 }
 
 // ═══════════════════════════════════════════════════
-// GOOGLE DRIVE — guardar y cargar datos
+// GOOGLE SHEETS — respaldo central tuyo
 // ═══════════════════════════════════════════════════
+// Reemplaza con el ID de tu hoja de cálculo
+// URL ejemplo: docs.google.com/spreadsheets/d/ESTE_ES_EL_ID/edit
+const SHEETS_ID = '190xJIo8Zw2Jcil8hQSaaJyciUTzT3w6WCkWdq7YXC0A';
+const SHEETS_URL = `https://sheets.googleapis.com/v4/spreadsheets/${SHEETS_ID}/values/Datos!A1:append?valueInputOption=RAW`;
+
+async function respaldarEnSheets(tipo, detalle) {
+  if (!G.accessToken || !SHEETS_ID || SHEETS_ID === 'TU_SPREADSHEET_ID') return;
+  try {
+    const d = STATE.moto;
+    const fila = [
+      new Date().toLocaleDateString('es-CO'),
+      new Date().toLocaleTimeString('es-CO'),
+      G.userInfo?.email || STATE.email || 'anonimo',
+      G.userInfo?.name || '',
+      d ? `${d.marca} ${d.modelo} ${d.año}` : '',
+      String(getKmActual()),
+      tipo,
+      detalle
+    ];
+    await fetch(SHEETS_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + G.accessToken
+      },
+      body: JSON.stringify({ values: [fila] })
+    });
+  } catch(e) { console.warn('Sheets backup error:', e); }
+}
+
+// ═══════════════════════════════════════════════════
+// MICRÓFONO REAL — Web Speech API
+// ═══════════════════════════════════════════════════
+let recognition = null;
+let micActivo = false;
+
+function iniciarMic() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    showToast('Tu navegador no soporta micrófono. Usa Chrome en Android.', 'error');
+    return false;
+  }
+  recognition = new SpeechRecognition();
+  recognition.lang = 'es-CO';
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 1;
+
+  recognition.onstart = () => {
+    micActivo = true;
+    const btn = document.getElementById('btn-mic');
+    const status = document.getElementById('mic-status');
+    if (btn) { btn.textContent = '⏹'; btn.classList.add('mic-rec'); }
+    if (status) status.innerHTML = '<span style="color:var(--red);font-weight:700">🔴 Escuchando... habla con confianza</span>';
+  };
+
+  recognition.onresult = (event) => {
+    let textoFinal = '';
+    let textoParcial = '';
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const t = event.results[i][0].transcript;
+      if (event.results[i].isFinal) textoFinal += t + ' ';
+      else textoParcial += t;
+    }
+    const campo = document.getElementById('voz-texto');
+    if (campo) {
+      const actual = campo.value;
+      campo.value = actual + textoFinal;
+      const hint = document.getElementById('mic-hint');
+      if (hint && textoParcial) hint.textContent = '...' + textoParcial;
+    }
+    validarVoz();
+  };
+
+  recognition.onerror = (event) => {
+    console.warn('Speech error:', event.error);
+    detenerMic();
+    if (event.error === 'not-allowed') {
+      showToast('Permiso de micrófono denegado. Actívalo en configuración del navegador.', 'error');
+    }
+  };
+
+  recognition.onend = () => { detenerMic(); };
+
+  recognition.start();
+  return true;
+}
+
+function detenerMic() {
+  micActivo = false;
+  if (recognition) { try { recognition.stop(); } catch(e) {} }
+  const btn = document.getElementById('btn-mic');
+  const status = document.getElementById('mic-status');
+  const hint = document.getElementById('mic-hint');
+  if (btn) { btn.textContent = '🎙️'; btn.classList.remove('mic-rec'); }
+  if (status) status.innerHTML = 'Toca el micrófono para grabar de nuevo';
+  if (hint) hint.textContent = 'O edita el texto directamente abajo';
+}
+
+function toggleMic() {
+  if (micActivo) detenerMic();
+  else iniciarMic();
+}
+
+function validarVoz() {
+  const texto = (document.getElementById('voz-texto')||{}).value||'';
+  const btn = document.getElementById('btn-voz');
+  if (btn) btn.disabled = texto.trim().length < 5;
+}
+
+// Limpiar mic al abrir/cerrar la sección
+const _toggleSection = toggleSection;
+function toggleSection(id) {
+  _toggleSection(id);
+  if (id === 'form-voz') {
+    const el = document.getElementById('form-voz');
+    if (el && el.style.display === 'none' && micActivo) detenerMic();
+    if (el && el.style.display === 'block') {
+      // Reset estado del mic
+      const btn = document.getElementById('btn-mic');
+      const status = document.getElementById('mic-status');
+      if (btn) { btn.textContent = '🎙️'; btn.classList.remove('mic-rec'); }
+      if (status) status.textContent = 'Toca el micrófono y cuéntanos qué le hicieron a tu moto';
+      validarVoz();
+    }
+  }
+}
 async function guardarEnDrive() {
   if (!G.accessToken) return; // Sin token no intentamos
   try {
@@ -1241,7 +1377,9 @@ function markDone(component) {
     const km = getKmActual();
     STATE.bigFive[component] = km;
     STATE.historial.unshift({fecha:new Date().toLocaleDateString('es-CO'),titulo:'Cambio de '+component,km,costo:0});
-    save(); renderDashboard(); renderHV();
+    save();
+    respaldarEnSheets('Dashboard', `Marcó como hecho: ${component} · ${km} km`);
+    renderDashboard(); renderHV();
     showToast('✅ Registrado correctamente', 'ok');
   } catch(e) {}
 }
@@ -1788,12 +1926,12 @@ function mostrarResultadoVoz(parsed) {
   } catch(e) {}
 }
 
-// FIX 5: guardarDesdeVoz robusto
 function guardarDesdeVoz(parsed) {
   try {
     const km = getKmActual();
     if (!Array.isArray(STATE.historial)) STATE.historial = [];
-    (parsed.items||[]).forEach(item => {
+    const items = parsed.items||[];
+    items.forEach(item => {
       STATE.historial.unshift({
         fecha:new Date().toLocaleDateString('es-CO'),
         titulo:`${item.componente} — ${item.accion}`,
@@ -1801,10 +1939,17 @@ function guardarDesdeVoz(parsed) {
       });
     });
     save();
+    // Respaldo en Sheets
+    const resumen = items.map(i=>i.componente).join(', ');
+    respaldarEnSheets('Voz/Texto', resumen + (parsed.costo_total ? ` · $${parsed.costo_total}` : ''));
     renderHV();
     renderDashboard();
     const vr = document.getElementById('voz-result');
     if (vr) vr.innerHTML = '<div style="color:var(--green);font-size:14px;font-weight:700;padding:12px 0">✅ Guardado en tu hoja de vida</div>';
+    // Limpiar campo de voz
+    const vt = document.getElementById('voz-texto');
+    if (vt) vt.value = '';
+    validarVoz();
     showToast('✅ Servicio guardado', 'ok');
   } catch(e) { showToast('Error al guardar. Intenta de nuevo.', 'error'); }
 }
@@ -1868,6 +2013,8 @@ function guardarServicio() {
       STATE.bigFive[compKey] = kmServ;
     }
     save();
+    // Respaldo en Google Sheets
+    respaldarEnSheets('Formulario', `${rep} · ${kmServ} km${costo?' · $'+costo:''}`);
     renderHV();
     renderDashboard();
     const sr = document.getElementById('save-result');
