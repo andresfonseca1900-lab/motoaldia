@@ -4,8 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Tu Moto al Día</title>
-<!-- FIX 6: jsPDF via CDN para descarga real de PDF en móviles -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<!-- Google Identity Services (login con Google) -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 :root {
   --bg:#0D0D0D;--surface:#1A1A1A;--card:#222;--border:#2E2E2E;
@@ -100,9 +101,20 @@ svg.ring{transform:rotate(-90deg);}
 <div id="splash">
   <div style="font-size:70px;margin-bottom:20px">🏍️</div>
   <div style="font-size:32px;font-weight:900;color:var(--white);letter-spacing:-1px">Tu Moto al Día</div>
-  <div style="font-size:14px;color:var(--metal);margin:10px 0 44px;line-height:1.6">El historial, la salud y la comunidad<br>de tu motocicleta, en un solo lugar.</div>
-  <button class="btn" onclick="startOnboarding()">Registrar mi moto</button>
-  <div style="font-size:13px;color:var(--metal);margin-top:16px;cursor:pointer" onclick="loadFromStorage()">Ya tengo cuenta · Entrar</div>
+  <div style="font-size:14px;color:var(--metal);margin:10px 0 36px;line-height:1.6">El historial, la salud y la comunidad<br>de tu motocicleta, en un solo lugar.</div>
+
+  <!-- UN SOLO BOTÓN — hace todo: login, Drive y activa IA -->
+  <button onclick="conectarGemini()" style="width:320px;display:flex;align-items:center;justify-content:center;gap:12px;padding:16px 24px;background:#fff;color:#333;font-size:16px;font-weight:700;border-radius:10px;border:none;cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,.4)">
+    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" style="width:24px;height:24px">
+    Continuar con Google
+  </button>
+
+  <div style="font-size:12px;color:var(--metal);margin-top:16px;line-height:1.8;text-align:center;max-width:280px">
+    Inicia sesión · Activa la IA · Guarda tus datos<br>
+    <strong style="color:var(--metal-lt)">Todo en un toque. Todo gratis.</strong>
+  </div>
+
+  <div style="font-size:11px;color:var(--border);margin-top:28px;cursor:pointer" onclick="entrarSinLogin()">Explorar sin cuenta</div>
 </div>
 
 <!-- ONBOARDING -->
@@ -345,10 +357,52 @@ svg.ring{transform:rotate(-90deg);}
   <div id="screen-perfil" class="screen" style="padding-top:14px">
     <div class="lbl">Perfil y Ajustes</div>
     <div class="ttl">Configuración.</div>
-    <div class="sec">Cuenta y notificaciones</div>
+    <div class="sec">Mi cuenta</div>
+    <!-- Usuario Google -->
+    <div class="card" id="google-user-card" style="display:none;padding:14px 16px">
+      <div style="display:flex;align-items:center;gap:12px">
+        <img id="google-avatar" src="" style="width:44px;height:44px;border-radius:50%;border:2px solid var(--red)" onerror="this.style.display='none'">
+        <div>
+          <div id="google-name" style="font-size:14px;font-weight:700;color:var(--white)">--</div>
+          <div id="google-email-show" style="font-size:12px;color:var(--metal)">--</div>
+          <div style="font-size:11px;color:var(--green);margin-top:3px">✅ Datos guardados en tu Google Drive</div>
+        </div>
+      </div>
+      <button onclick="cerrarSesion()" style="margin-top:12px;background:none;border:1px solid var(--border);color:var(--metal);border-radius:8px;padding:8px 14px;font-size:12px;cursor:pointer;width:100%;font-family:inherit">Cerrar sesión de Google</button>
+    </div>
+    <!-- Sin login -->
+    <div class="card" id="no-login-card" style="padding:14px 16px">
+      <div style="font-size:13px;color:var(--metal);margin-bottom:10px">No has iniciado sesión con Google. Tus datos solo están en este dispositivo.</div>
+      <button class="btn btn-sm" onclick="iniciarLoginGoogle()">🔑 Conectar con Google</button>
+    </div>
+
+    <!-- Gemini con OAuth - sin keys visibles -->
+    <div class="sec">Inteligencia Artificial</div>
+    <div class="card" id="gemini-card" style="padding:14px 16px">
+      <div id="gemini-no-conectado" style="display:block">
+        <div style="font-size:13px;color:var(--white);font-weight:600;margin-bottom:4px">🤖 IA con Gemini</div>
+        <div style="font-size:12px;color:var(--metal);margin-bottom:12px;line-height:1.5">Análisis de facturas, diagnóstico y más. Gratis con tu cuenta Google.</div>
+        <button class="btn" onclick="conectarGemini()" id="btn-conectar-gemini" style="display:flex;align-items:center;justify-content:center;gap:8px">
+          <img src="https://www.gstatic.com/images/branding/product/2x/google_g_48dp.png" style="width:18px;height:18px">
+          Activar IA con Google — Gratis
+        </button>
+      </div>
+      <div id="gemini-conectado" style="display:none">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#4285f4,#34a853);display:flex;align-items:center;justify-content:center;font-size:18px">🤖</div>
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--white)">Gemini AI activado</div>
+            <div style="font-size:11px;color:var(--green)">✅ Listo — análisis de facturas y diagnóstico activos</div>
+          </div>
+        </div>
+        <button onclick="desconectarGemini()" style="margin-top:10px;background:none;border:1px solid var(--border);color:var(--metal);border-radius:8px;padding:7px 14px;font-size:12px;cursor:pointer;width:100%;font-family:inherit">Desconectar IA</button>
+      </div>
+    </div>
+
+    <div class="sec">Correo para alertas</div>
     <div class="card" style="padding:0 16px">
       <div class="acc-row">
-        <div><div style="font-size:13px;color:var(--white)">Correo Gmail</div><div style="font-size:11px;color:var(--metal);margin-top:2px">Alertas y hoja de vida mensual</div></div>
+        <div><div style="font-size:13px;color:var(--white)">Correo Gmail</div><div style="font-size:11px;color:var(--metal);margin-top:2px">Hoja de vida mensual</div></div>
         <div style="text-align:right">
           <input class="inp" id="inp-email" type="email" placeholder="tu@gmail.com" style="width:150px;padding:7px;font-size:12px;text-align:right">
           <button onclick="guardarCorreo()" style="background:none;border:none;color:var(--red);font-size:12px;cursor:pointer;font-weight:700;margin-top:4px;display:block;margin-left:auto">Guardar</button>
@@ -489,6 +543,7 @@ const REPUESTOS_POR_CAT = {
 const STATE_DEFAULT = {
   moto:null,kmBase:0,kmDia:35,fechaBase:null,llantas:'calle',
   bigFive:{},historial:[],foto:null,email:null,envioMensual:true,
+  geminiKey:null,
   accesorios:{alarmaPila:null,soatVence:null,tecnoVence:null,seguroVence:null},
   accesoriosLibres:[],pendientesViernes:[]
 };
@@ -527,12 +582,298 @@ function getKmActual() {
 // ═══════════════════════════════════════════════════
 // INIT — FIX 7: salta directo al dashboard si ya hay datos
 // ═══════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
+// CONFIGURACIÓN GOOGLE / GEMINI
+// ═══════════════════════════════════════════════════
+const GOOGLE_CLIENT_ID = '35329522888-ogvs9f24oe8nlea4vdehcjuvon51rbfj.apps.googleusercontent.com';
+const DRIVE_FILE_NAME  = 'tumotoaldia_datos.json';
+
+// Scopes necesarios: Drive + Gemini (Generative Language API)
+const GOOGLE_SCOPES = [
+  'profile',
+  'email',
+  'https://www.googleapis.com/auth/drive.appdata',
+  'https://www.googleapis.com/auth/generative-language.retriever',
+].join(' ');
+
+const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+
+// Token en memoria — nunca en localStorage
+let G = { accessToken: null, userInfo: null };
+
+// ═══════════════════════════════════════════════════
+// GEMINI — usa el token OAuth del usuario, sin key
+// ═══════════════════════════════════════════════════
+async function callGemini(prompt, imageBase64, imageMime) {
+  if (!G.accessToken) throw new Error('NO_TOKEN');
+
+  const parts = [{ text: prompt }];
+  if (imageBase64) {
+    parts.unshift({ inline_data: { mime_type: imageMime || 'image/jpeg', data: imageBase64 } });
+  }
+
+  const res = await fetch(GEMINI_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + G.accessToken   // OAuth token del usuario
+    },
+    body: JSON.stringify({
+      contents: [{ parts }],
+      generationConfig: { temperature: 0.3, maxOutputTokens: 1024 }
+    })
+  });
+
+  if (res.status === 401) {
+    // Token expirado — pedir nuevo login
+    G.accessToken = null;
+    actualizarUIGemini();
+    throw new Error('TOKEN_EXPIRED');
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(()=>({}));
+    throw new Error(err?.error?.message || 'HTTP ' + res.status);
+  }
+  const data = await res.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+}
+
+// Mensaje cuando el usuario no ha conectado la IA
+function getNoKeyHTML(accion) {
+  return `<div style="background:rgba(66,133,244,.08);border:1px solid rgba(66,133,244,.3);border-radius:10px;padding:14px">
+    <div style="font-size:13px;font-weight:700;color:#7eb3ff;margin-bottom:6px">🤖 Activa la IA para ${accion}</div>
+    <div style="font-size:12px;color:var(--metal);line-height:1.5;margin-bottom:10px">Es gratis con tu cuenta Google. Un solo toque y listo.</div>
+    <button class="btn btn-sm" onclick="conectarGemini();goToTab('perfil')">Activar IA con Google — Gratis</button>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════
+// CONECTAR GEMINI — un solo botón para el usuario
+// ═══════════════════════════════════════════════════
+function conectarGemini() {
+  // Abre popup OAuth de Google pidiendo permiso para Gemini y Drive
+  const params = new URLSearchParams({
+    client_id:     GOOGLE_CLIENT_ID,
+    redirect_uri:  window.location.origin + window.location.pathname,
+    response_type: 'token',                    // token implícito — funciona sin backend
+    scope:         GOOGLE_SCOPES,
+    prompt:        'consent',
+    include_granted_scopes: 'true'
+  });
+  // Guardar estado para saber que volvemos de OAuth
+  sessionStorage.setItem('tmad_oauth_pending', '1');
+  window.location.href = 'https://accounts.google.com/o/oauth2/auth?' + params;
+}
+
+function desconectarGemini() {
+  G.accessToken = null;
+  actualizarUIGemini();
+  showToast('IA desconectada', 'ok');
+}
+
+// Leer token del hash URL cuando Google redirige de vuelta
+function leerTokenDeURL() {
+  try {
+    if (!sessionStorage.getItem('tmad_oauth_pending')) return;
+    const hash = window.location.hash.substring(1);
+    const params = new URLSearchParams(hash);
+    const token = params.get('access_token');
+    if (!token) return;
+    G.accessToken = token;
+    sessionStorage.removeItem('tmad_oauth_pending');
+    // Limpiar el hash de la URL sin recargar
+    history.replaceState(null, '', window.location.pathname);
+    // Obtener info del usuario
+    fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: 'Bearer ' + token }
+    }).then(r => r.json()).then(info => {
+      G.userInfo = info;
+      STATE.email = info.email || STATE.email;
+      save();
+      actualizarUIGoogle();
+      actualizarUIGemini();
+      showToast('✅ Google y Gemini conectados', 'ok');
+      // Cargar datos desde Drive
+      cargarDesdeDrive().then(() => {
+        if (STATE.moto) showMainApp();
+        else startOnboarding();
+      });
+    }).catch(() => {
+      actualizarUIGemini();
+      if (STATE.moto) showMainApp();
+      else startOnboarding();
+    });
+  } catch(e) { console.warn('Token read error:', e); }
+}
+
+function actualizarUIGemini() {
+  try {
+    const conectado = document.getElementById('gemini-conectado');
+    const noConectado = document.getElementById('gemini-no-conectado');
+    if (G.accessToken) {
+      if (conectado) conectado.style.display = 'block';
+      if (noConectado) noConectado.style.display = 'none';
+    } else {
+      if (conectado) conectado.style.display = 'none';
+      if (noConectado) noConectado.style.display = 'block';
+    }
+  } catch(e) {}
+}
+
+// Funciones legacy eliminadas — ya no se necesitan
+function guardarGeminiKey() {}
+async function testGemini() { showToast('Usa el botón "Activar IA con Google"', 'ok'); }
+
+// ═══════════════════════════════════════════════════
+// GOOGLE LOGIN
+// ═══════════════════════════════════════════════════
+function onGoogleLogin(response) {
+  try {
+    // Decodificar JWT del token de Google
+    const payload = JSON.parse(atob(response.credential.split('.')[1]));
+    G.userInfo = { name: payload.name, email: payload.email, picture: payload.picture, sub: payload.sub };
+    STATE.email = payload.email;
+    save();
+    actualizarUIGoogle();
+    // Intentar cargar datos desde Drive
+    cargarDesdeDrive().then(() => {
+      if (STATE.moto) showMainApp();
+      else startOnboarding();
+    });
+  } catch(e) { console.warn('Google login error:', e); startOnboarding(); }
+}
+
+function iniciarLoginGoogle() {
+  try {
+    // Usa la librería GSI para abrir el popup de Google
+    if (window.google?.accounts?.id) {
+      google.accounts.id.prompt();
+    } else {
+      // Fallback: OAuth directo
+      const params = new URLSearchParams({
+        client_id: GOOGLE_CLIENT_ID,
+        redirect_uri: window.location.origin + window.location.pathname,
+        response_type: 'token',
+        scope: 'profile email https://www.googleapis.com/auth/drive.appdata',
+        prompt: 'select_account'
+      });
+      window.location.href = 'https://accounts.google.com/o/oauth2/auth?' + params;
+    }
+  } catch(e) { console.warn('Login error:', e); }
+}
+
+function actualizarUIGoogle() {
+  try {
+    const card = document.getElementById('google-user-card');
+    const noCard = document.getElementById('no-login-card');
+    if (G.userInfo) {
+      if (card) card.style.display = 'block';
+      if (noCard) noCard.style.display = 'none';
+      const av = document.getElementById('google-avatar');
+      if (av && G.userInfo.picture) av.src = G.userInfo.picture;
+      const nm = document.getElementById('google-name');
+      if (nm) nm.textContent = G.userInfo.name || '';
+      const em = document.getElementById('google-email-show');
+      if (em) em.textContent = G.userInfo.email || '';
+    } else {
+      if (card) card.style.display = 'none';
+      if (noCard) noCard.style.display = 'block';
+    }
+  } catch(e) {}
+}
+
+function cerrarSesion() {
+  if (confirm('¿Cerrar sesión? Tus datos siguen guardados en Google Drive.')) {
+    G = { accessToken: null, userInfo: null };
+    actualizarUIGoogle();
+    showToast('Sesión cerrada', 'ok');
+  }
+}
+
+function entrarSinLogin() {
+  const has = loadState();
+  if (has && STATE.moto) showMainApp();
+  else startOnboarding();
+}
+
+// ═══════════════════════════════════════════════════
+// GOOGLE DRIVE — guardar y cargar datos
+// ═══════════════════════════════════════════════════
+async function guardarEnDrive() {
+  if (!G.accessToken) return; // Sin token no intentamos
+  try {
+    const content = JSON.stringify(STATE, null, 2);
+    // Buscar si ya existe el archivo
+    const search = await fetch(
+      `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name='${DRIVE_FILE_NAME}'&fields=files(id)`,
+      { headers: { Authorization: 'Bearer ' + G.accessToken } }
+    );
+    const searchData = await search.json();
+    const fileId = searchData.files?.[0]?.id;
+
+    const metadata = { name: DRIVE_FILE_NAME, parents: fileId ? undefined : ['appDataFolder'] };
+    const form = new FormData();
+    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+    form.append('file', new Blob([content], { type: 'application/json' }));
+
+    const url = fileId
+      ? `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`
+      : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+
+    await fetch(url, {
+      method: fileId ? 'PATCH' : 'POST',
+      headers: { Authorization: 'Bearer ' + G.accessToken },
+      body: form
+    });
+  } catch(e) { console.warn('Drive save error:', e); }
+}
+
+async function cargarDesdeDrive() {
+  if (!G.accessToken) return;
+  try {
+    const search = await fetch(
+      `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name='${DRIVE_FILE_NAME}'&fields=files(id)`,
+      { headers: { Authorization: 'Bearer ' + G.accessToken } }
+    );
+    const data = await search.json();
+    const fileId = data.files?.[0]?.id;
+    if (!fileId) return;
+    const file = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+      { headers: { Authorization: 'Bearer ' + G.accessToken } }
+    );
+    const parsed = await file.json();
+    if (parsed?.moto) {
+      STATE = Object.assign({}, STATE_DEFAULT, parsed);
+      if (!Array.isArray(STATE.historial)) STATE.historial = [];
+      save(); // también en localStorage como caché local
+      showToast('✅ Datos cargados desde Google Drive', 'ok');
+    }
+  } catch(e) { console.warn('Drive load error:', e); }
+}
+
+// Override save para guardar también en Drive
+const _saveLocal = save;
+function save() {
+  try { localStorage.setItem('tmad_state', JSON.stringify(STATE)); } catch(e) {}
+  // Guardar en Drive de forma no bloqueante
+  guardarEnDrive().catch(()=>{});
+}
+
+// ═══════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════
 window.onload = function() {
   populateMarcas();
-  const hasData = loadState();
-  if (hasData && STATE.moto) {
-    showMainApp();
+  // Leer token OAuth si Google nos redirigió de vuelta
+  if (window.location.hash.includes('access_token')) {
+    leerTokenDeURL();
+    return; // leerTokenDeURL maneja el flujo completo
   }
+  const has = loadState();
+  actualizarUIGoogle();
+  actualizarUIGemini();
+  if (has && STATE.moto) showMainApp();
 };
 
 // ═══════════════════════════════════════════════════
@@ -932,19 +1273,67 @@ function renderHV() {
 }
 
 // FIX 2: MANUALES con URLs reales por marca
+// URL base de tu servidor de manuales — cambia esto cuando tengas el servidor listo
+// Estructura esperada: MANUAL_SERVER_BASE + id_de_moto + "_propietario.pdf"
+//                      MANUAL_SERVER_BASE + id_de_moto + "_taller.pdf"
+// Ejemplo: https://manuales.tumotoaldia.com/bajaj_ns200_propietario.pdf
+const MANUAL_SERVER_BASE = 'https://manuales.tumotoaldia.com/';
+
 function renderTaller() {
   try {
     if (!STATE.moto) return;
     const d = STATE.moto;
     const mc = document.getElementById('manuals-card');
     if (!mc) return;
-    const manualUrl = d.manualUrl || '#';
+
+    const motoId = d.id || (d.marca+'_'+d.modelo).toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'');
+    const urlPropietario = MANUAL_SERVER_BASE + motoId + '_propietario.pdf';
+    const urlTaller     = MANUAL_SERVER_BASE + motoId + '_taller.pdf';
+
     mc.innerHTML = `
       <div style="font-size:13px;color:var(--white);font-weight:600;margin-bottom:4px">${d.marca} ${d.modelo} ${d.año}</div>
-      <div style="font-size:12px;color:var(--metal);margin-bottom:12px">Accede al portal oficial de ${d.marca} Colombia para descargar los manuales de tu moto.</div>
-      <a href="${manualUrl}" target="_blank" rel="noopener" style="display:block;width:100%;padding:12px;background:var(--red);border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;text-align:center;text-decoration:none;margin-bottom:8px">📖 Manual de Propietario — ${d.marca}</a>
-      <div style="font-size:11px;color:var(--metal);text-align:center;line-height:1.5">Serás redirigido al sitio oficial de ${d.marca} Colombia.<br>Los manuales están disponibles en PDF para descarga.</div>`;
+      <div style="font-size:12px;color:var(--metal);margin-bottom:14px">Manuales oficiales alojados en el servidor de Tu Moto al Día.</div>
+
+      <a href="${urlPropietario}" target="_blank" rel="noopener"
+         style="display:flex;align-items:center;gap:10px;width:100%;padding:13px 14px;background:var(--red);border-radius:10px;color:#fff;font-size:14px;font-weight:700;text-decoration:none;margin-bottom:8px"
+         onclick="verificarManual(event,'${urlPropietario}')">
+        <span style="font-size:20px">📖</span>
+        <div><div>Manual del Propietario</div><div style="font-size:11px;font-weight:400;opacity:.8">${d.marca} ${d.modelo} — PDF oficial</div></div>
+      </a>
+
+      <a href="${urlTaller}" target="_blank" rel="noopener"
+         style="display:flex;align-items:center;gap:10px;width:100%;padding:13px 14px;background:var(--card);border:1px solid var(--border);border-radius:10px;color:var(--white);font-size:14px;font-weight:600;text-decoration:none;margin-bottom:10px"
+         onclick="verificarManual(event,'${urlTaller}')">
+        <span style="font-size:20px">🔧</span>
+        <div><div>Manual de Taller</div><div style="font-size:11px;color:var(--metal);font-weight:400">${d.marca} ${d.modelo} — Despiece técnico</div></div>
+      </a>
+
+      <div id="manual-status" style="font-size:11px;color:var(--metal);text-align:center;line-height:1.6;padding:6px 0">
+        Los PDFs se abren directamente desde el servidor.<br>
+        Si el manual no está disponible aún, te redirigiremos al portal oficial de ${d.marca}.
+      </div>`;
   } catch(e) {}
+}
+
+// Verifica si el PDF existe en el servidor antes de abrirlo
+// Si no existe, redirige al portal oficial de la marca como fallback
+async function verificarManual(event, url) {
+  try {
+    const d = STATE.moto;
+    const status = document.getElementById('manual-status');
+    if (status) status.innerHTML = '<span style="color:var(--amber)">⏳ Verificando disponibilidad del manual...</span>';
+    const res = await fetch(url, { method:'HEAD' });
+    if (!res.ok) throw new Error('no disponible');
+    if (status) status.innerHTML = '<span style="color:var(--green)">✅ Manual disponible — abriendo PDF...</span>';
+  } catch(e) {
+    // PDF no está en el servidor aún — abrir portal oficial
+    event.preventDefault();
+    const d = STATE.moto;
+    const fallback = d.manualUrl || 'https://www.google.com/search?q=manual+'+encodeURIComponent((d.marca||'')+' '+(d.modelo||''))+'PDF';
+    const status = document.getElementById('manual-status');
+    if (status) status.innerHTML = `<span style="color:var(--amber)">⚠️ Manual no disponible aún en el servidor.<br>Redirigiendo al portal oficial de ${d.marca}...</span>`;
+    setTimeout(() => window.open(fallback, '_blank'), 1000);
+  }
 }
 
 // FIX PDF: namespace corregido + fallback si la lib no carga
@@ -1156,7 +1545,7 @@ function renderPerfil() {
   } catch(e) { console.warn('renderPerfil error:', e); }
 }
 
-// FIX 3: DIAGNÓSTICO con manejo de errores visual
+// DIAGNÓSTICO con Gemini
 async function diagnosticar() {
   const sintoma = (document.getElementById('sintoma-input')||{}).value||'';
   if (!sintoma.trim()) { showToast('Describe el síntoma primero', 'error'); return; }
@@ -1164,19 +1553,25 @@ async function diagnosticar() {
   const result = document.getElementById('diag-result');
   if (btn) { btn.disabled = true; btn.textContent = 'Analizando...'; }
   if (result) result.innerHTML = '<div class="spinner"></div>';
-  const d = STATE.moto;
-  const km = getKmActual();
+  const d = STATE.moto, km = getKmActual();
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:800,messages:[{role:'user',content:`Eres el asistente mecánico de "Tu Moto al Día". El usuario tiene una ${d.marca} ${d.modelo} ${d.año} con ${km.toLocaleString()} km. Aceite: ${d.aceiteRec}. Refrigeración: ${d.refrigeracionLiquida?'líquida':'aire'}.\n\nEl usuario reporta: "${sintoma}"\n\nResponde en español, máximo 200 palabras:\n1. Posibles causas (máx. 3, de más a menos probable)\n2. Qué revisar primero\n3. Urgencia (urgente / puede esperar / ir al taller)\n\nNO hagas diagnósticos definitivos, solo orientación.`}]})
-    });
-    if (!res.ok) throw new Error('HTTP '+res.status);
-    const data = await res.json();
-    const text = data.content?.[0]?.text||'Sin respuesta.';
+    const prompt = `Eres el asistente mecánico de "Tu Moto al Día". El usuario tiene una ${d.marca} ${d.modelo} ${d.año} con ${km.toLocaleString()} km. Aceite: ${d.aceiteRec}. Refrigeración: ${d.refrigeracionLiquida?'líquida':'aire'}.
+
+El usuario reporta: "${sintoma}"
+
+Responde en español, máximo 200 palabras:
+1. Posibles causas (máx. 3, de más a menos probable)
+2. Qué revisar primero
+3. Urgencia (urgente / puede esperar / ir al taller)
+
+NO hagas diagnósticos definitivos, solo orientación.`;
+
+    const text = await callGemini(prompt);
     if (result) result.innerHTML = `<div style="background:rgba(74,144,226,.08);border:1px solid rgba(74,144,226,.25);border-radius:10px;padding:14px"><div style="font-size:11px;color:var(--blue);font-weight:700;margin-bottom:8px">🔍 ORIENTACIÓN IA — No reemplaza al mecánico</div><div style="font-size:13px;color:var(--white);line-height:1.6;white-space:pre-wrap">${text}</div></div>`;
   } catch(e) {
-    if (result) result.innerHTML = `<div style="background:rgba(224,43,43,.08);border:1px solid var(--red-dim);border-radius:10px;padding:14px"><div style="font-size:13px;font-weight:700;color:var(--red);margin-bottom:6px">⚠️ No se pudo conectar con la IA</div><div style="font-size:12px;color:var(--metal);line-height:1.5">Esto puede deberse a restricciones de red en GitHub Pages. Para usar el diagnóstico IA necesitas ejecutar la app desde un servidor con backend propio.<br><br>Mientras tanto puedes describir el síntoma a tu mecánico de confianza.</div></div>`;
+    if (result) result.innerHTML = e.message === 'NO_TOKEN'
+      ? getNoKeyHTML('el diagnóstico por síntoma')
+      : `<div style="background:rgba(224,43,43,.08);border:1px solid var(--red-dim);border-radius:10px;padding:14px"><div style="font-size:13px;font-weight:700;color:var(--red);margin-bottom:6px">⚠️ Error de conexión</div><div style="font-size:12px;color:var(--metal)">${e.message}</div></div>`;
   }
   if (btn) { btn.disabled = false; btn.textContent = '🔍 Diagnosticar con IA'; }
 }
@@ -1193,33 +1588,33 @@ function usarFacturaEjemplo() {
   mostrarResultadoFactura(ej);
 }
 
+// ANÁLISIS DE FACTURA con Gemini Vision
 async function analizarFacturaFoto(e) {
   try {
     const file = e.target.files[0];
     if (!file) return;
     const result = document.getElementById('factura-result');
-    if (result) result.innerHTML = '<div class="spinner"></div><div style="text-align:center;font-size:12px;color:var(--metal);margin-top:8px">Analizando imagen con IA...</div>';
+    if (result) result.innerHTML = '<div class="spinner"></div><div style="text-align:center;font-size:12px;color:var(--metal);margin-top:8px">Analizando factura con Gemini...</div>';
     const reader = new FileReader();
     reader.onload = async function(ev) {
       try {
         const base64 = ev.target.result.split(',')[1];
+        const mime = file.type || 'image/jpeg';
         const d = STATE.moto || {marca:'',modelo:'',intervalos:{},aceiteRec:'',refrigeracionLiquida:false};
-        const res = await fetch('https://api.anthropic.com/v1/messages', {
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,messages:[{role:'user',content:[
-            {type:'image',source:{type:'base64',media_type:'image/jpeg',data:base64}},
-            {type:'text',text:`Eres el asistente de "Tu Moto al Día". Moto: ${d.marca} ${d.modelo}. Refrigerante: ${d.refrigeracionLiquida?'SÍ':'NO'}. Filtros de aire: 1. Analiza la factura. Responde SOLO JSON sin backticks: {"items":[{"nombre":"...","valor":0,"ok":true,"razon":""}],"total":0,"alertas":[],"resumen":"...","puntaje":85}`}
-          ]}]})
-        });
-        if (!res.ok) throw new Error('HTTP '+res.status);
-        const data = await res.json();
+        const prompt = `Eres el asistente de "Tu Moto al Día". Moto: ${d.marca} ${d.modelo}. Refrigerante: ${d.refrigeracionLiquida?'SÍ':'NO'}. Filtros de aire: 1.
+Analiza la factura de taller en la imagen. Responde SOLO JSON sin backticks:
+{"items":[{"nombre":"...","valor":0,"ok":true,"razon":""}],"total":0,"alertas":[],"resumen":"...","puntaje":85}
+ok=false si: cantidad incorrecta, servicio que no aplica al modelo, precio anómalo en Colombia.`;
+        const text = await callGemini(prompt, base64, mime);
         let parsed;
-        try { parsed = JSON.parse((data.content?.[0]?.text||'{}').replace(/```json|```/g,'').trim()); }
-        catch(pe) { throw new Error('Respuesta IA no parseable'); }
+        try { parsed = JSON.parse(text.replace(/```json|```/g,'').trim()); }
+        catch(pe) { parsed = {items:[],alertas:['No se pudo interpretar la respuesta'],resumen:'Error de formato',puntaje:0}; }
         mostrarResultadoFactura(parsed);
       } catch(err) {
         const r = document.getElementById('factura-result');
-        if (r) r.innerHTML = `<div style="background:rgba(224,43,43,.08);border:1px solid var(--red-dim);border-radius:10px;padding:14px"><div style="font-size:13px;font-weight:700;color:var(--red);margin-bottom:6px">⚠️ No se pudo analizar la foto</div><div style="font-size:12px;color:var(--metal);line-height:1.5">La conexión con la IA no está disponible en GitHub Pages por políticas de seguridad (CORS). Puedes usar el botón "Ver ejemplo" para ver cómo funciona el análisis.</div></div>`;
+        if (r) r.innerHTML = err.message === 'NO_TOKEN'
+          ? getNoKeyHTML('analizar facturas')
+          : `<div style="background:rgba(224,43,43,.08);border:1px solid var(--red-dim);border-radius:10px;padding:14px"><div style="font-size:13px;font-weight:700;color:var(--red);margin-bottom:6px">⚠️ Error al analizar</div><div style="font-size:12px;color:var(--metal)">${err.message}</div><div style="margin-top:10px"><button class="btn btn-sm" onclick="usarFacturaEjemplo()">Ver con factura de ejemplo</button></div></div>`;
       }
     };
     reader.readAsDataURL(file);
@@ -1327,7 +1722,7 @@ function handleRecibo(e) {
   } catch(e) {}
 }
 
-// FIX 8: analizarVoz con JSON.parse tolerante
+// ANÁLISIS DE VOZ/TEXTO con Gemini
 async function analizarVoz() {
   try {
     const texto = (document.getElementById('voz-texto')||{}).value||'';
@@ -1338,26 +1733,31 @@ async function analizarVoz() {
     if (result) result.innerHTML = '<div class="spinner"></div>';
     const d = STATE.moto, km = getKmActual();
     try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:600,messages:[{role:'user',content:`Extrae servicios de mantenimiento del siguiente texto para una ${d.marca} ${d.modelo} con ${km.toLocaleString()} km.\nTexto: "${texto}"\nResponde SOLO JSON sin backticks: {"items":[{"componente":"...","accion":"...","hace":"...","km":null}],"costo_total":null,"notas":"..."}`}]})
-      });
-      if (!res.ok) throw new Error('HTTP '+res.status);
-      const data = await res.json();
+      const prompt = `Extrae servicios de mantenimiento del siguiente texto para una ${d.marca} ${d.modelo} con ${km.toLocaleString()} km.
+Texto: "${texto}"
+Responde SOLO JSON sin backticks: {"items":[{"componente":"...","accion":"...","hace":"...","km":null}],"costo_total":null,"notas":"..."}`;
+
+      const text = await callGemini(prompt);
       let parsed;
-      try { parsed = JSON.parse((data.content?.[0]?.text||'{}').replace(/```json|```/g,'').trim()); }
+      try { parsed = JSON.parse(text.replace(/```json|```/g,'').trim()); }
       catch(pe) {
-        // FIX 8: fallback si el JSON falla
-        parsed = {items:[{componente:'Mantenimiento general',accion:texto.substring(0,60),hace:'Hoy',km:null}],costo_total:null,notas:'Guardado como nota de texto libre.'};
+        parsed = {items:[{componente:'Mantenimiento general',accion:texto.substring(0,80),hace:'Hoy',km:null}],costo_total:null,notas:'Guardado como nota de texto libre.'};
       }
       mostrarResultadoVoz(parsed);
     } catch(err) {
-      // FIX 3 + FIX 8: guardado local si la API falla
-      const parsed = {items:[{componente:'Mantenimiento registrado manualmente',accion:texto.substring(0,100),hace:'Hoy',km:null}],costo_total:null,notas:'Guardado sin IA — API no disponible.'};
-      mostrarResultadoVoz(parsed);
+      if (err.message === 'NO_TOKEN') {
+        if (result) result.innerHTML = getNoKeyHTML('analizar el mantenimiento por texto');
+      } else {
+        // Fallback sin IA
+        const parsed = {items:[{componente:'Mantenimiento registrado',accion:texto.substring(0,100),hace:'Hoy',km:null}],costo_total:null,notas:'Guardado sin IA.'};
+        mostrarResultadoVoz(parsed);
+      }
     }
     if (btn) { btn.disabled = false; btn.textContent = 'Analizar con IA →'; }
-  } catch(e) { if(document.getElementById('btn-voz')) { document.getElementById('btn-voz').disabled=false; document.getElementById('btn-voz').textContent='Analizar con IA →'; } }
+  } catch(e) {
+    const btn = document.getElementById('btn-voz');
+    if (btn) { btn.disabled = false; btn.textContent = 'Analizar con IA →'; }
+  }
 }
 
 function mostrarResultadoVoz(parsed) {
@@ -1416,14 +1816,43 @@ function guardarServicio() {
       esPersonalizado: repRaw === '__custom__',
       foto: reciboBase64||null
     });
-    // Reset component si aplica
+    // Mapa completo: cada repuesto actualiza su círculo de vida en el dashboard
     const compMap = {
-      'Cambio de aceite de motor':'aceite',
-      'Kit de arrastre completo (cadena + piñón + corona)':'arrastre',
-      'Pastillas de freno delanteras':'frenos',
-      'Pastillas de freno traseras':'frenos'
+      // Motor
+      'Cambio de aceite de motor'                          : 'aceite',
+      'Filtro de aceite'                                   : 'aceite',   // va siempre con el aceite
+      'Filtro de aire'                                     : 'filtroAire',
+      'Bujía (NGK / Iridium)'                              : 'bujia',
+      'Calibración de válvulas'                            : 'valvulas',
+      'Revisión de clutch / embrague'                      : 'clutch',
+      // Transmisión
+      'Kit de arrastre completo (cadena + piñón + corona)' : 'arrastre',
+      'Cadena de transmisión sola'                         : 'arrastre',
+      'Piñón conductor (delantero)'                        : 'arrastre',
+      'Corona / catalina (trasera)'                        : 'arrastre',
+      'Cable de embrague'                                  : 'guayas',
+      'Cable de acelerador'                                : 'guayas',
+      // Frenos
+      'Pastillas de freno delanteras'                      : 'frenos',
+      'Pastillas de freno traseras'                        : 'frenos',
+      'Banda de freno trasera (tambor)'                    : 'frenos',
+      'Líquido de frenos DOT 4'                            : 'liquidoFrenos',
+      'Purga del sistema de frenos'                        : 'liquidoFrenos',
+      // Suspensión
+      'Rodamientos de tijera / dirección'                  : 'cunasDireccion',
+      'Cuñas de dirección'                                 : 'cunasDireccion',
+      'Bujes de basculante'                                : 'cunasDireccion',
+      // Llantas
+      'Llanta delantera'                                   : 'llantas',
+      'Llanta trasera'                                     : 'llantas',
+      // Refrigeración
+      'Líquido refrigerante (anticongelante)'              : 'refrigerante',
+      'Purgado del sistema de refrigeración'               : 'refrigerante',
     };
-    if (compMap[rep]) STATE.bigFive[compMap[rep]] = kmServ;
+    const compKey = compMap[rep] || compMap[cat] || null;
+    if (compKey) {
+      STATE.bigFive[compKey] = kmServ;
+    }
     save();
     renderHV();
     renderDashboard();
