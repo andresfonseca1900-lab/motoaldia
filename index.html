@@ -598,8 +598,13 @@ const GOOGLE_SCOPES = [
 
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
 
-// Token en memoria — nunca en localStorage
-let G = { accessToken: null, userInfo: null };
+// Token en sessionStorage para sobrevivir refreshes (se borra al cerrar el navegador)
+let G = {
+  get accessToken() { return sessionStorage.getItem('tmad_gtoken'); },
+  set accessToken(v) { v ? sessionStorage.setItem('tmad_gtoken', v) : sessionStorage.removeItem('tmad_gtoken'); },
+  get userInfo() { try { return JSON.parse(sessionStorage.getItem('tmad_guser')||'null'); } catch(e) { return null; } },
+  set userInfo(v) { v ? sessionStorage.setItem('tmad_guser', JSON.stringify(v)) : sessionStorage.removeItem('tmad_guser'); }
+};
 
 // ═══════════════════════════════════════════════════
 // GEMINI — usa el token OAuth del usuario, sin key
@@ -868,12 +873,21 @@ window.onload = function() {
   // Leer token OAuth si Google nos redirigió de vuelta
   if (window.location.hash.includes('access_token')) {
     leerTokenDeURL();
-    return; // leerTokenDeURL maneja el flujo completo
+    return;
   }
   const has = loadState();
   actualizarUIGoogle();
   actualizarUIGemini();
-  if (has && STATE.moto) showMainApp();
+  // Si ya tiene token en sesión y moto guardada, entrar directo sin pedir login
+  if (G.accessToken && has && STATE.moto) {
+    showMainApp();
+    return;
+  }
+  // Si tiene moto guardada localmente pero no token, entrar igual
+  if (has && STATE.moto) {
+    showMainApp();
+    return;
+  }
 };
 
 // ═══════════════════════════════════════════════════
